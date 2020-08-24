@@ -1,0 +1,18 @@
+[package]
+name = "xcodegen"
+version = "0.1.0" # keep in sync with html_root_url
+authors = ["arcnmx"]
+edition = "2018"
+
+description = ""
+keywords = ["x11", "xorg", "xcb", "x"]
+
+#documentation = "https://docs.rs/???"
+#repository = "https://github.com/arcnmx/????"
+readme = "../README.md"
+license = "MIT"
+
+[dependencies]
+roxmltree = "0.13.0"
+xcbgen = { path = "../x11rb/xcbgen-rs" }
+enumflags2 = "^0.6.4"

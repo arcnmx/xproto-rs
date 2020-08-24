@@ -1,0 +1,8 @@
+[submodule "xcbproto"]
+	path = xcbproto
+	url = https://github.com/arcnmx/xcbproto.git
+	branch = arc
+[submodule "x11rb"]
+	path = x11rb
+	url = https://github.com/psychon/x11rb.git
+	branch = master
