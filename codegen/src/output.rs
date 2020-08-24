@@ -524,8 +524,11 @@ impl fmt::Display for OutputFieldType<'_> {
                 match list.length() {
                     Some(len) =>
                         write!(f, "[{}; {}]", type_, len),
-                    None =>
-                        write!(f, "Vec<{}>", type_), // TODO: consider Cow<[T]> or even SmallVec<[T]> when you know the size is limited
+                    None => match list.element_type.type_.try_get_resolved() {
+                        Some(TypeRef::BuiltIn(BuiltInType::Char)) =>
+                            write!(f, "protocol::XString"),
+                        _ => write!(f, "Vec<{}>", type_), // TODO: consider Cow<[T]> or even SmallVec<[T]> when you know the size is limited
+                    },
                 }?
             },
             FieldDef::Switch(switch) => {

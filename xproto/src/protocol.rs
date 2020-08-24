@@ -1,4 +1,4 @@
-use core::{mem, slice};
+use core::{mem, slice, fmt, str, ops, iter};
 use core::convert::TryInto;
 use std::borrow::Cow;
 use byteorder::NativeEndian;
@@ -410,5 +410,137 @@ pub enum EventCode {
 impl EventCode {
     pub fn is_core(code: u8) -> bool {
         code < 64
+    }
+}
+
+#[derive(Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
+pub struct XString {
+    pub data: Vec<u8>,
+}
+
+impl XString {
+    pub fn new<I: Into<Vec<u8>>>(data: I) -> Self {
+        Self {
+            data: data.into(),
+        }
+    }
+
+    pub fn into_inner(self) -> Vec<u8> {
+        self.data
+    }
+
+    pub fn to_str(&self) -> Result<&str, str::Utf8Error> {
+        str::from_utf8(self.data.as_bytes())
+    }
+
+    pub fn to_str_lossy(&self) -> Cow<str> {
+        String::from_utf8_lossy(&self.data[..])
+    }
+
+    pub fn into_string(self) -> Result<String, std::string::FromUtf8Error> {
+        String::from_utf8(self.data)
+    }
+
+    pub fn into_string_lossy(self) -> String {
+        match self.to_str_lossy() {
+            Cow::Borrowed(_) => unsafe {
+                String::from_utf8_unchecked(self.data)
+            },
+            Cow::Owned(lossy) => lossy,
+        }
+    }
+}
+
+impl ops::Deref for XString {
+    type Target = Vec<u8>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl ops::DerefMut for XString {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data
+    }
+}
+
+// TODO: more From impls
+
+impl From<String> for XString {
+    fn from(data: String) -> Self {
+        Self::new(data)
+    }
+}
+
+impl From<Vec<u8>> for XString {
+    fn from(data: Vec<u8>) -> Self {
+        Self::new(data)
+    }
+}
+
+impl From<&'_ str> for XString {
+    fn from(data: &str) -> Self {
+        Self::new(data)
+    }
+}
+
+impl From<XString> for Vec<u8> {
+    fn from(str: XString) -> Self {
+        str.into_inner()
+    }
+}
+
+impl iter::FromIterator<u8> for XString {
+    fn from_iter<T: IntoIterator<Item=u8>>(iter: T) -> Self {
+        Self::new(iter.into_iter().collect::<Vec<_>>())
+    }
+}
+
+impl IntoIterator for XString {
+    type IntoIter = <Vec<u8> as IntoIterator>::IntoIter;
+    type Item = u8;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.data.into_iter()
+    }
+}
+
+impl fmt::Debug for XString {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&self.to_str_lossy()[..], f)
+    }
+}
+
+impl fmt::Display for XString {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.to_str() {
+            Ok(str) => fmt::Display::fmt(str, f),
+            Err(..) => Err(fmt::Error),
+        }
+    }
+}
+
+impl Message for XString {
+    const ALIGNMENT: MessageAlignment = <Vec<u8> as Message>::ALIGNMENT;
+    const SIZE: MessageSize = <Vec<u8> as Message>::SIZE;
+
+    fn size(&self) -> usize {
+        self.data.size()
+    }
+
+    fn encode<B: bytes::BufMut>(&self, b: &mut B) {
+        self.data.encode(b)
+    }
+}
+
+impl FromMessage for XString {
+    type Error = <Vec<u8> as FromMessage>::Error;
+    type Context = <Vec<u8> as FromMessage>::Context;
+
+    fn decode<B: bytes::Buf>(context: Self::Context, b: &mut B) -> Result<Option<Self>, Self::Error> {
+        Vec::<u8>::decode(context, b)
+            .map(|data| data.map(Self::new))
     }
 }

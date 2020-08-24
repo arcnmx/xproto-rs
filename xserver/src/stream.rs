@@ -318,8 +318,8 @@ impl<R: AsyncRead> XConnection<R> {
             protocol_major_version: 11,
             protocol_minor_version: 0,
             byte_order: xproto::BYTE_ORDER,
-            authorization_protocol_data,
-            authorization_protocol_name,
+            authorization_protocol_data: authorization_protocol_data.into(),
+            authorization_protocol_name: authorization_protocol_name.into(),
         };
         write.send(setup).await?;
 
