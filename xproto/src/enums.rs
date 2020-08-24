@@ -574,6 +574,13 @@ impl<E: Copy, T: Copy + Default> Default for AltEnum<E, T> {
     }
 }
 
+impl<E: Copy, T: Copy> From<E> for AltEnum<E, T> where E: Into<T> {
+    fn from(value: E) -> Self {
+        Self::new(value)
+    }
+}
+
+
 impl<E: Copy, T: Copy> AltEnum<E, T> {
     pub fn new(value: E) -> Self where E: Into<T> {
         Self {
