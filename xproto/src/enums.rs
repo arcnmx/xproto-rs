@@ -186,6 +186,19 @@ macro_rules! enum_backing {
 }
 
 macro_rules! from_xid {
+    (@from $xid:ty => $enum:ty) => {
+        impl From<$enum> for $xid {
+            fn from(value: $enum) -> Self {
+                Self::new(value.into())
+            }
+        }
+
+        impl From<$xid> for AltEnum<$enum, $xid> {
+            fn from(value: $xid) -> Self {
+                Self::with_value(value)
+            }
+        }
+    };
     (@bool $xid:ty => $enum:ty) => {
         impl TryFrom<$xid> for $enum {
             type Error = DecodeError;
@@ -196,11 +209,7 @@ macro_rules! from_xid {
             }
         }
 
-        impl From<$enum> for $xid {
-            fn from(value: $enum) -> Self {
-                Self::new(value.into())
-            }
-        }
+        from_xid! { @from $xid => $enum }
     };
     ($xid:ty => $enum:ty) => {
         impl TryFrom<$xid> for $enum {
@@ -213,11 +222,7 @@ macro_rules! from_xid {
             }
         }
 
-        impl From<$enum> for $xid {
-            fn from(value: $enum) -> Self {
-                Self::new(value.into())
-            }
-        }
+        from_xid! { @from $xid => $enum }
     };
 }
 
@@ -498,6 +503,16 @@ impl<E: Copy + RawBitFlags, T: Copy + From<E::Type>> From<BitFlags<E>> for Resiz
     fn from(flags: BitFlags<E>) -> Self {
         unsafe {
             Self::with_bits_unchecked(flags.bits().into())
+        }
+    }
+}
+
+impl<E: Copy + RawBitFlags, T: Copy> AsPrimitive<ResizeMask<E, T>> for BitFlags<E> where
+    E::Type: AsPrimitive<T>,
+{
+    fn as_(self) -> ResizeMask<E, T> {
+        unsafe {
+            ResizeMask::with_bits_unchecked(self.bits().as_())
         }
     }
 }
