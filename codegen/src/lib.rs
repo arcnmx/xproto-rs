@@ -62,12 +62,9 @@ pub fn generate<W: Write>(mut w: W, ns: &Rc<Namespace>) -> io::Result<()> {
                     external_params: &[],
                     alignment,
                     namespace: Rc::downgrade(ns),
+                    header: Some(header),
                 };
                 writeln!(w, "{}", struct_)?;
-                writeln!(w, "{}", OutputHeader {
-                    header,
-                    impl_: struct_.impl_(),
-                })?;
             },
             defs::EventDef::Copy(def) => {
                 let ref_ = &def.ref_;
@@ -101,12 +98,9 @@ pub fn generate<W: Write>(mut w: W, ns: &Rc<Namespace>) -> io::Result<()> {
                     external_params: &[],
                     alignment: ComplexAlignment::fixed_size(32, 4),
                     namespace: Rc::downgrade(ns),
+                    header: Some(header),
                 };
                 writeln!(w, "{}", struct_)?;
-                writeln!(w, "{}", OutputHeader {
-                    header,
-                    impl_: struct_.impl_(),
-                })?;
             },
         }
     }
@@ -193,6 +187,7 @@ pub fn generate<W: Write>(mut w: W, ns: &Rc<Namespace>) -> io::Result<()> {
             external_params: &external_params,
             alignment: defs::ComplexAlignment::fixed_size(32, 4).zero_one_or_many().unwrap(), // TODO
             namespace: Rc::downgrade(ns),
+            header: None,
         };
         let event_switch = defs::SwitchField {
             name: "event".into(),
@@ -224,18 +219,13 @@ pub fn generate<W: Write>(mut w: W, ns: &Rc<Namespace>) -> io::Result<()> {
             external_params: &external_params,
             alignment: defs::ComplexAlignment::fixed_size(32, 4).zero_one_or_many().unwrap(), // TODO
             namespace: Rc::downgrade(ns),
+            header: Some(Header::Events {
+                ext: ns.ext_info.as_ref(),
+                opcode_min,
+                opcode_max,
+            }),
         };
         let impl_ = output.impl_();
-        writeln!(w, "{}", output)?;
-        let header = Header::Events {
-            ext: ns.ext_info.as_ref(),
-            opcode_min,
-            opcode_max,
-        };
-        let output = OutputHeader {
-            header,
-            impl_: impl_.clone(),
-        };
         writeln!(w, "{}", output)?;
     }
 
@@ -260,12 +250,9 @@ pub fn generate<W: Write>(mut w: W, ns: &Rc<Namespace>) -> io::Result<()> {
                     external_params: &[],
                     alignment: ComplexAlignment::fixed_size(32, alignment.align()),
                     namespace: Rc::downgrade(ns),
+                    header: Some(header),
                 };
                 writeln!(w, "{}", struct_)?;
-                writeln!(w, "{}", OutputHeader {
-                    header,
-                    impl_: struct_.impl_(),
-                })?;
             },
             defs::ErrorDef::Copy(def) => {
                 let ref_ = &def.ref_;
@@ -302,12 +289,9 @@ pub fn generate<W: Write>(mut w: W, ns: &Rc<Namespace>) -> io::Result<()> {
                     external_params: &[],
                     alignment: ComplexAlignment::fixed_size(32, 4),
                     namespace: Rc::downgrade(ns),
+                    header: Some(header),
                 };
                 writeln!(w, "{}", struct_)?;
-                writeln!(w, "{}", OutputHeader {
-                    header,
-                    impl_: struct_.impl_(),
-                })?;
             },
         }
     }
@@ -340,12 +324,9 @@ pub fn generate<W: Write>(mut w: W, ns: &Rc<Namespace>) -> io::Result<()> {
                     external_params: &[],
                     alignment: ComplexAlignment::fixed_size(alignment.align(), alignment.align()).zero_one_or_many().unwrap(),
                     namespace: Rc::downgrade(ns),
+                    header: Some(header),
                 };
                 writeln!(w, "{}", struct_)?;
-                writeln!(w, "{}", OutputHeader {
-                    header,
-                    impl_: struct_.impl_(),
-                })?;
                 name
             },
             None => {
@@ -387,12 +368,9 @@ pub fn generate<W: Write>(mut w: W, ns: &Rc<Namespace>) -> io::Result<()> {
             external_params: &[],
             alignment: ComplexAlignment::fixed_size(alignment.align(), alignment.align()).zero_one_or_many().unwrap(),
             namespace: Rc::downgrade(ns),
+            header: Some(header),
         };
         writeln!(w, "{}", struct_)?;
-        writeln!(w, "{}", OutputHeader {
-            header,
-            impl_: struct_.impl_(),
-        })?;
     }
 
     Ok(())
@@ -441,7 +419,7 @@ impl Message for ExtensionEvent {{
     const ALIGNMENT: MessageAlignment = MessageAlignment::new(4);
     const SIZE: MessageSize = MessageSize::new(0);
 
-    fn size(&self) -> usize {{
+    fn message_size(&self) -> usize {{
         match self {{")?;
     for ns in ns.iter() {
         let ns = ns.as_ref();
@@ -454,7 +432,7 @@ impl Message for ExtensionEvent {{
             if ns.ext_info.is_some() {
                 writeln!(w, "\t\t\t#[cfg(feature = \"{}\")]", ns.header)?;
             }
-            writeln!(w, "\t\t\tExtensionEvent::{}(e) => e.size(),", ident::ename_to_rust(name))?;
+            writeln!(w, "\t\t\tExtensionEvent::{}(e) => e.message_size(),", ident::ename_to_rust(name))?;
         }
     }
     writeln!(w, "

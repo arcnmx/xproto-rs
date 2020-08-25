@@ -37,9 +37,7 @@ async fn main() -> Result<(), Error> {
         .expect("extension not found");
     eprintln!("Present ext {:?}", present);
 
-    let mut create_window = x::CreateWindowRequest {
-        length: 0,
-        major_opcode: x::CreateWindowRequest::INFO.request_opcode(),
+    let create_window = x::CreateWindowRequest {
         depth: x::WindowClass::CopyFromParent.into(),
         wid: window,
         parent: screen.root,
@@ -67,24 +65,18 @@ async fn main() -> Result<(), Error> {
             .. Default::default()
         },
     };
-    create_window.length = (create_window.size() / 4).try_into().unwrap();
     sink.execute(create_window).await.await?;
 
     let event_id = sink.generate_id().await?;
-    let mut select_input = present::SelectInputRequest {
-        length: 0,
+    let select_input = present::SelectInputRequest {
         major_opcode: present.major_opcode,
-        minor_opcode: present::SelectInputRequest::INFO.request_opcode(),
         eid: event_id,
         window,
         event_mask: present::EventMask::ConfigureNotify.into(),
     };
-    select_input.length = (select_input.size() / 4).try_into().unwrap();
     sink.execute(select_input).await.await?;
 
-    let mut configure_window = x::ConfigureWindowRequest {
-        length: 0,
-        major_opcode: x::ConfigureWindowRequest::INFO.request_opcode(),
+    let configure_window = x::ConfigureWindowRequest {
         window,
         value_list: x::ConfigureWindowRequestValueList {
             width: Some(x::ConfigureWindowRequestValueListWidth {
@@ -93,15 +85,12 @@ async fn main() -> Result<(), Error> {
             .. Default::default()
         },
     };
-    configure_window.length = (configure_window.size() / 4).try_into().unwrap();
     sink.execute(configure_window).await.await?;
 
-    let mut map_window = x::MapWindowRequest {
+    let map_window = x::MapWindowRequest {
         window,
-        major_opcode: x::MapWindowRequest::INFO.request_opcode(),
         .. Default::default()
     };
-    map_window.length = (map_window.size() / 4).try_into().unwrap();
     sink.execute(map_window).await.await?;
 
     events.await?

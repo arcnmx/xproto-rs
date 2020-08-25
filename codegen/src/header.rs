@@ -1,5 +1,6 @@
 use xcbgen::defs::ExtInfo;
 
+#[derive(Copy, Clone)]
 pub enum Header<'a> {
     Request {
         reply: &'a str,

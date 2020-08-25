@@ -187,12 +187,9 @@ impl<W: AsyncWrite + Unpin> XSink<W> {
         let ext = match cached {
             Some(ext) => Ok(ext),
             None => {
-                let mut req = QueryExtensionRequest {
-                    major_opcode: QueryExtensionRequest::CORE_INFO.opcode,
-                    length: 0,
+                let req = QueryExtensionRequest {
                     name: kind.to_string().into(),
                 };
-                req.length = (req.size() / 4).try_into().unwrap();
                 Err((self.execute(req).await, self.shared.clone()))
             },
         };

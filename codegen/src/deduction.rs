@@ -17,6 +17,8 @@ pub enum DeducibleField {
     ///
     /// `(switch name)`
     BitCaseSwitchExpr(String, DeducibleFieldOp),
+    RequestOpcode,
+    RequestLength,
 }
 
 #[derive(Clone, Debug)]
@@ -27,8 +29,6 @@ pub enum DeducibleLengthFieldOp {
     Mul(u32),
     /// `deduced field = list length / n`
     Div(u32),
-    /// `deduced field = list length * field / n`
-    MulDiv(String, u32),
 }
 
 #[derive(Debug, Clone)]
@@ -65,21 +65,6 @@ pub fn gather_deducible_fields(fields: &[&xcbdefs::FieldDef]) -> HashMap<String,
                             field_ref_expr.field_name.clone(),
                             DeducibleLengthFieldOp::Div(*value),
                         )),
-                        (
-                            xcbdefs::Expression::FieldRef(field_ref_expr),
-                            xcbdefs::Expression::BinaryOp(xcbdefs::BinaryOpExpr {
-                                operator: xcbdefs::BinaryOperator::Div, lhs, rhs
-                            }),
-                        ) => match (&**lhs, &**rhs) {
-                            (
-                                xcbdefs::Expression::FieldRef(field_ref_lhs),
-                                xcbdefs::Expression::Value(value),
-                            ) => Some((
-                                field_ref_expr.field_name.clone(),
-                                DeducibleLengthFieldOp::MulDiv(field_ref_lhs.field_name.clone(), *value),
-                            )),
-                            _ => None,
-                        },
                         _ => None,
                     }
                 } else if bin_op_expr.operator == xcbdefs::BinaryOperator::Div {
@@ -91,21 +76,6 @@ pub fn gather_deducible_fields(fields: &[&xcbdefs::FieldDef]) -> HashMap<String,
                             field_ref_expr.field_name.clone(),
                             DeducibleLengthFieldOp::Mul(*value),
                         )),
-                        (
-                            xcbdefs::Expression::BinaryOp(xcbdefs::BinaryOpExpr {
-                                operator: xcbdefs::BinaryOperator::Mul, lhs, rhs
-                            }),
-                            xcbdefs::Expression::Value(value),
-                        ) => match (&**lhs, &**rhs) {
-                            (
-                                xcbdefs::Expression::FieldRef(field_ref_expr),
-                                xcbdefs::Expression::FieldRef(field_ref_rhs),
-                            ) => Some((
-                                field_ref_expr.field_name.clone(),
-                                DeducibleLengthFieldOp::MulDiv(field_ref_rhs.field_name.clone(), *value),
-                            )),
-                            _ => None,
-                        },
                         _ => None,
                     }
                 } else {

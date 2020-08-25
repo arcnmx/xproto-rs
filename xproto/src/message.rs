@@ -78,7 +78,7 @@ pub trait Message {
     const ALIGNMENT: MessageAlignment;
     const SIZE: MessageSize;
 
-    fn size(&self) -> usize;
+    fn message_size(&self) -> usize;
     fn encode<B: BufMut>(&self, b: &mut B);
 }
 
@@ -97,8 +97,8 @@ pub trait FromMessage: Message + Sized {
     const ALIGNMENT: MessageAlignment = <T as Message>::ALIGNMENT;
     const SIZE: MessageSize = <T as Message>::SIZE;
 
-    fn size(&self) -> usize {
-        (*self).size()
+    fn message_size(&self) -> usize {
+        (*self).message_size()
     }
 
     fn encode<B: BufMut>(&self, b: &mut B) {
@@ -139,7 +139,7 @@ impl<T: MessageAsBytes> Message for T {
     const ALIGNMENT: MessageAlignment = MessageAlignment::new(mem::align_of::<Self>());
     const SIZE: MessageSize = MessageSize::new(mem::size_of::<Self>());
 
-    fn size(&self) -> usize {
+    fn message_size(&self) -> usize {
         mem::size_of_val(self)
     }
 
@@ -176,9 +176,9 @@ impl<T: Message> Message for Option<T> {
     const ALIGNMENT: MessageAlignment = T::ALIGNMENT;
     const SIZE: MessageSize = T::SIZE.to_zero_or_many();
 
-    fn size(&self) -> usize {
+    fn message_size(&self) -> usize {
         match self {
-            Some(m) => m.size(),
+            Some(m) => m.message_size(),
             None => 0,
         }
     }
@@ -207,8 +207,8 @@ impl<T: Message> Message for Vec<T> {
     const ALIGNMENT: MessageAlignment = T::ALIGNMENT;
     const SIZE: MessageSize = T::SIZE.to_zero_or_many();
 
-    fn size(&self) -> usize {
-        self.iter().map(|m| m.size()).sum()
+    fn message_size(&self) -> usize {
+        self.iter().map(|m| m.message_size()).sum()
     }
 
     fn encode<B: BufMut>(&self, b: &mut B) {
@@ -260,8 +260,8 @@ impl<E: RawBitFlags> Message for BitFlags<E> where E::Type: Message {
     const ALIGNMENT: MessageAlignment = MessageAlignment::new(mem::align_of::<Self>());
     const SIZE: MessageSize = MessageSize::Fixed { size: mem::size_of::<Self>() };
 
-    fn size(&self) -> usize {
-        self.bits().size()
+    fn message_size(&self) -> usize {
+        self.bits().message_size()
     }
 
     fn encode<B: BufMut>(&self, b: &mut B) {

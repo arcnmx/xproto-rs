@@ -110,7 +110,7 @@ impl RequestHeader {
     }
 
     pub fn with_request<R: CoreRequest>(request: &R, data: u8) -> Self {
-        Self::with_length::<R>(data, request.size())
+        Self::with_length::<R>(data, request.message_size())
     }
 
     pub fn with_length<R: CoreRequest>(data: u8, length: usize) -> Self {
@@ -140,7 +140,7 @@ impl ExtensionRequestHeader {
     }
 
     pub fn with_request<R: ExtensionRequest>(request: &R, major_opcode: u8) -> Self {
-        Self::with_length::<R>(major_opcode, request.size())
+        Self::with_length::<R>(major_opcode, request.message_size())
     }
 
     pub fn with_length<R: ExtensionRequest>(major_opcode: u8, length: usize) -> Self {
@@ -526,8 +526,8 @@ impl Message for XString {
     const ALIGNMENT: MessageAlignment = <Vec<u8> as Message>::ALIGNMENT;
     const SIZE: MessageSize = <Vec<u8> as Message>::SIZE;
 
-    fn size(&self) -> usize {
-        self.data.size()
+    fn message_size(&self) -> usize {
+        self.data.message_size()
     }
 
     fn encode<B: bytes::BufMut>(&self, b: &mut B) {

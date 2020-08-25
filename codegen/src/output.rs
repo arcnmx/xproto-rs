@@ -877,6 +877,7 @@ pub struct OutputStruct<'a> {
     pub variant: Option<&'a OutputSwitch<'a>>,
     pub alignment: defs::ComplexAlignment,
     pub namespace: Weak<defs::Namespace>,
+    pub header: Option<Header<'a>>
     // derives?
     //def: &'a defs::StructDef,
 }
@@ -997,6 +998,24 @@ impl OutputStruct<'_> {
         }
     }
 
+    pub fn deducible(&self) -> HashMap<String, DeducibleField> {
+        let mut deducible = gather_deducible_fields(self.fields);
+
+        match self.header {
+            Some(Header::Request { reply, combine_adjacent, opcode }) => {
+                deducible.insert("major_opcode".into(), DeducibleField::RequestOpcode);
+                deducible.insert("length".into(), DeducibleField::RequestLength);
+            },
+            Some(Header::ExtensionRequest { reply, combine_adjacent, minor_opcode, ext }) => {
+                deducible.insert("minor_opcode".into(), DeducibleField::RequestOpcode);
+                deducible.insert("length".into(), DeducibleField::RequestLength);
+            },
+            _ => (),
+        }
+
+        deducible
+    }
+
     pub fn is_copy<'a, F: IntoIterator<Item=&'a FieldDef>>(fields: F, alignment: defs::Alignment) -> BitFlags<ImplDerive> {
         let init = match alignment.offset() {
             0 => ImplDerive::defaults(),
@@ -1053,7 +1072,7 @@ impl OutputStruct<'_> {
 impl fmt::Display for OutputStruct<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut switch_fields = Vec::new();
-        let deducible = gather_deducible_fields(self.fields);
+        let deducible = self.deducible();
         let mut special_fields = false;
         let impl_ = self.impl_();
         //let name = ident::to_rust_type_name(self.name);
@@ -1171,7 +1190,7 @@ impl fmt::Display for OutputStruct<'_> {
         }
 
         writeln!(f, "{}", OutputMessage {
-            impl_: impl_,
+            impl_: impl_.clone(),
             fields: self.fields,
             context,
             parent: self.parent.cloned(),
@@ -1186,6 +1205,13 @@ impl fmt::Display for OutputStruct<'_> {
                 def: field,
             };
             writeln!(f, "{}", output)?;
+        }
+
+        if let Some(header) = self.header {
+            writeln!(f, "{}", OutputHeader {
+                header,
+                impl_: impl_,
+            })?;
         }
 
         Ok(())
@@ -1232,16 +1258,16 @@ impl fmt::Display for OutputMessage<'_> {
                 },
             };
             if let Some(size) = fixed_size {
-                writeln!(f, "\tfn size(&self) -> usize {{ {} }}", size)?;
+                writeln!(f, "\tfn message_size(&self) -> usize {{ {} }}", size)?;
             } else {
-                writeln!(f, "\tfn size(&self) -> usize {{")?;
+                writeln!(f, "\tfn message_size(&self) -> usize {{")?;
                 writeln!(f, "\t\tlet size = ")?;
                 match self.impl_.kind {
                     ImplKind::Enum { .. } => {
                         writeln!(f, "\t\tmatch self {{")?;
                         for field in self.fields {
                             if let Some(name) = field.name() {
-                                writeln!(f, "\t\t\t{}::{}(f) => f.size(),", self.impl_.type_name(), ident::ename_to_rust(name))?;
+                                writeln!(f, "\t\t\t{}::{}(f) => f.message_size(),", self.impl_.type_name(), ident::ename_to_rust(name))?;
                             }
                         }
                         writeln!(f, "\t\t}}")?;
@@ -1253,17 +1279,29 @@ impl fmt::Display for OutputMessage<'_> {
                         }
                         match field {
                             FieldDef::Switch(def) => {
-                                writeln!(f, "self.{}.size()", ident::to_rust_variable_name(&def.name))?;
+                                writeln!(f, "self.{}.message_size()", ident::to_rust_variable_name(&def.name))?;
                             },
                             FieldDef::Expr(def) => {
-                                writeln!(f, "{}.size()", self.context.format(&def.name, defs::FieldRefKind::LocalField, false))?;
+                                // NOTE: assumes any computable fields are fixed-size
+                                if OutputFieldType::is_copy(field).contains(ImplDerive::AsBytes) {
+                                    let ty = OutputValueType {
+                                        namespace: self.impl_.namespace.clone(),
+                                        ref_: &def.type_,
+                                    };
+                                    writeln!(f, "<{} as FixedSizeMessage>::FIXED_SIZE", ty)?;
+                                } else {
+                                    writeln!(f, "{}.message_size()", self.context.format(&def.name, defs::FieldRefKind::LocalField, false))?;
+                                }
                             },
                             FieldDef::Normal(def) => {
-                                match def.type_.value_set {
-                                    FieldValueSet::Mask(..) =>
-                                        writeln!(f, "{}.size()", self.context.format(&def.name, defs::FieldRefKind::LocalField, false))?,
-                                    _ =>
-                                        writeln!(f, "{}.size()", self.context.format(&def.name, defs::FieldRefKind::LocalField, false))?,
+                                if OutputFieldType::is_copy(field).contains(ImplDerive::AsBytes) {
+                                    let ty = OutputValueType {
+                                        namespace: self.impl_.namespace.clone(),
+                                        ref_: &def.type_,
+                                    };
+                                    writeln!(f, "<{} as FixedSizeMessage>::FIXED_SIZE", ty)?;
+                                } else {
+                                    writeln!(f, "{}.message_size()", self.context.format(&def.name, defs::FieldRefKind::LocalField, false))?;
                                 }
                             },
                             FieldDef::Pad(def) => match def.kind {
@@ -1276,7 +1314,7 @@ impl fmt::Display for OutputMessage<'_> {
                                 },
                             },
                             FieldDef::List(def) => {
-                                writeln!(f, "self.{}.size()", ident::to_rust_variable_name(&def.name))?;
+                                writeln!(f, "self.{}.message_size()", ident::to_rust_variable_name(&def.name))?;
                             },
                             FieldDef::VirtualLen(..) | FieldDef::Fd(..) | FieldDef::FdList(..) =>
                                 writeln!(f, "0")?,
@@ -1401,6 +1439,8 @@ impl fmt::Display for OutputMessage<'_> {
                 _ => (),
             }
 
+            let deducible = self.context.deducible.as_ref();
+
             writeln!(f, "\tfn decode<B: bytes::Buf>({}: Self::Context, b: &mut B) -> Result<Option<Self>, Self::Error> {{", context_destructure)?;
             writeln!(f, "\t\tlet _before = b.remaining();")?; // TODO: + start offset
             match self.impl_.kind {
@@ -1482,7 +1522,11 @@ impl fmt::Display for OutputMessage<'_> {
                                 let switch_params = def.external_params.borrow();
                                 let context_params: Vec<_> = switch_params.iter().map(|p|
                                     if self.fields.iter().any(|f| f.name() == Some(&p.name)) {
-                                        ident::to_rust_variable_name(&p.name)
+                                        if deducible.map(|ded| ded.contains_key(&p.name)).unwrap_or(false) {
+                                            format!("_{}", ident::to_rust_variable_name(&p.name))
+                                        } else {
+                                            ident::to_rust_variable_name(&p.name)
+                                        }
                                     } else {
                                         format!("param_{}", ident::to_rust_variable_name(&p.name))
                                     }
@@ -1506,13 +1550,22 @@ impl fmt::Display for OutputMessage<'_> {
                             FieldDef::Normal(def) => {
                                 let context_params: Vec<_> = OutputStruct::params_ref(def.type_.type_.get_resolved(), self.impl_.namespace.clone()).iter().map(|p|
                                     if self.fields.iter().any(|f| f.name() == Some(&p.field_name)) {
-                                        ident::to_rust_variable_name(&p.field_name)
+                                        if deducible.map(|ded| ded.contains_key(&p.field_name)).unwrap_or(false) {
+                                            format!("_{}", ident::to_rust_variable_name(&p.field_name))
+                                        } else {
+                                            ident::to_rust_variable_name(&p.field_name)
+                                        }
                                     } else {
                                         format!("param_{}", ident::to_rust_variable_name(&p.field_name))
                                     }
                                 ).collect();
                                 let context_params = context_params.join(", ");
-                                writeln!(f, "\t\tlet {}: {} = try_decode!(FromMessage::decode(({}), &mut *b));", ident::to_rust_variable_name(&def.name), type_, context_params)?;
+                                let prefix = if deducible.map(|ded| ded.contains_key(&def.name)).unwrap_or(false) {
+                                    "_"
+                                } else {
+                                    ""
+                                };
+                                writeln!(f, "\t\tlet {}{}: {} = try_decode!(FromMessage::decode(({}), &mut *b));", prefix, ident::to_rust_variable_name(&def.name), type_, context_params)?;
                             },
                             FieldDef::Fd(def) => {
                                 let context_params = ""; // TODO: Fd read context?
@@ -1549,7 +1602,11 @@ impl fmt::Display for OutputMessage<'_> {
                             FieldDef::List(def) => {
                                 let context_params: Vec<_> = OutputStruct::params_ref(def.element_type.type_.get_resolved(), self.impl_.namespace.clone()).iter().map(|p|
                                     if self.fields.iter().any(|f| f.name() == Some(&p.field_name)) {
-                                        ident::to_rust_variable_name(&p.field_name)
+                                        if deducible.map(|ded| ded.contains_key(&p.field_name)).unwrap_or(false) {
+                                            format!("_{}", ident::to_rust_variable_name(&p.field_name))
+                                        } else {
+                                            ident::to_rust_variable_name(&p.field_name)
+                                        }
                                     } else {
                                         format!("param_{}", ident::to_rust_variable_name(&p.field_name))
                                     }
@@ -1579,7 +1636,6 @@ impl fmt::Display for OutputMessage<'_> {
                         }
                     }
 
-                    let deducible = gather_deducible_fields(self.fields);
                     writeln!(f, "\t\tOk(Some(Self {{")?;
                     for (index, field) in self.fields.iter().enumerate() {
                         let name = OutputFieldName {
@@ -1588,7 +1644,7 @@ impl fmt::Display for OutputMessage<'_> {
                             index,
                         };
                         if let Some(name) = field.name() {
-                            if deducible.contains_key(name) {
+                            if deducible.map(|ded| ded.contains_key(name)).unwrap_or(false) {
                                 // TODO: assert or something?
                                 continue;
                             }
@@ -1732,6 +1788,7 @@ impl fmt::Display for OutputSwitch<'_> {
             external_params: &self.def.external_params.borrow()[..],
             alignment: self.def.alignment.get().unwrap().clone(),
             namespace: self.parent.namespace.clone(),
+            header: None,
         };
         writeln!(f, "{}", struct_)?;
 
@@ -1831,6 +1888,7 @@ impl fmt::Display for OutputSwitch<'_> {
                 external_params: &case.external_params.borrow()[..],
                 alignment: self.def.alignment.get().unwrap().clone(),
                 namespace: self.parent.namespace.clone(),
+                header: None,
             };
             writeln!(f, "{}", output)?;
         }
@@ -1882,6 +1940,7 @@ impl fmt::Display for OutputType<'_> {
                     external_params: &external_params,
                     alignment: def.alignment.get().unwrap().clone(),
                     namespace: def.namespace.clone(),
+                    header: None,
                 };
                 writeln!(f, "{}", output)?;
             },
@@ -1915,6 +1974,7 @@ impl fmt::Display for OutputType<'_> {
                     external_params: &[],
                     alignment: defs::ComplexAlignment::fixed_size(32, 4).zero_one_or_many().unwrap(), // TODO
                     namespace: def.namespace.clone(),
+                    header: None,
                 };
                 let impl_ = output.impl_();
                 writeln!(f, "{}", output)?;
@@ -2156,7 +2216,7 @@ impl<'a> ExprContext<'a> {
                     }
                 },
                 FieldDef::Normal(def) if self.deducible.map(|d| d.contains_key(&def.name)).unwrap_or(false) => if self.is_decoder {
-                    ident::to_rust_variable_name(&def.name)
+                    format!("_{}", ident::to_rust_variable_name(&def.name))
                 } else {
                     format!("self.{}()", ident::to_rust_variable_name(&def.name))
                 },
@@ -2177,6 +2237,10 @@ impl<'a> ExprContext<'a> {
                     format!("{}{}", prefix, name)
                 },
             },
+            None if name == "request_opcode" =>
+                "<Self as protocol::Request>::INFO.request_opcode()".into(),
+            None if name == "message_size" =>
+                "self.message_size()".into(),
             None => {
                 match kind {
                     defs::FieldRefKind::LocalField =>
@@ -2339,8 +2403,6 @@ impl OutputDeduction<'_> {
                             lhs: list_ref.into(),
                             rhs: Expression::Value(*value).into(),
                         }),
-                    DeducibleLengthFieldOp::MulDiv(field, value) =>
-                        unimplemented!("removed support for {:?}", field),
                         /*Expression::BinaryOp(defs::BinaryOpExpr {
                             operator: defs::BinaryOperator::Div,
                             lhs: Expression::BinaryOp(defs::BinaryOpExpr {
@@ -2371,6 +2433,20 @@ impl OutputDeduction<'_> {
                         }),
                 }
             },
+            DeducibleField::RequestLength =>
+                Expression::BinaryOp(defs::BinaryOpExpr {
+                    operator: defs::BinaryOperator::Div,
+                    lhs: Expression::FieldRef(defs::FieldRefExpr {
+                        field_name: "message_size".into(),
+                        resolved: Default::default(),
+                    }).into(),
+                    rhs: Expression::Value(4).into(),
+                }),
+            DeducibleField::RequestOpcode =>
+                Expression::FieldRef(defs::FieldRefExpr {
+                    field_name: "request_opcode".into(),
+                    resolved: Default::default(),
+                }).into(),
         }
     }
 }

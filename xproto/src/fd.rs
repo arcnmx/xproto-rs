@@ -8,7 +8,7 @@ impl Message for Fd {
     const ALIGNMENT: MessageAlignment = MessageAlignment::new(1);
     const SIZE: MessageSize = MessageSize::new(0);
 
-    fn size(&self) -> usize {
+    fn message_size(&self) -> usize {
         0
     }
 
