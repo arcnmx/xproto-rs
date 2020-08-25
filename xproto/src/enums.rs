@@ -195,6 +195,12 @@ macro_rules! from_xid {
                     .map_err(From::from)
             }
         }
+
+        impl From<$enum> for $xid {
+            fn from(value: $enum) -> Self {
+                Self::new(value.into())
+            }
+        }
     };
     ($xid:ty => $enum:ty) => {
         impl TryFrom<$xid> for $enum {
@@ -204,6 +210,12 @@ macro_rules! from_xid {
                 let repr: <$enum as CEnum>::Repr = value.xid().try_into()?;
                 <$enum>::try_from(repr)
                     .map_err(From::from)
+            }
+        }
+
+        impl From<$enum> for $xid {
+            fn from(value: $enum) -> Self {
+                Self::new(value.into())
             }
         }
     };
