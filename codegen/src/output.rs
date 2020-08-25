@@ -1751,6 +1751,39 @@ impl OutputSwitch<'_> {
     fn is_one_to_one(&self) -> bool {
         self.def.cases.iter().all(|case| case.exprs.len() == 1)
     }
+
+    pub fn is_list(switch: &defs::SwitchField) -> Option<String> {
+        if switch.kind != defs::SwitchKind::Case {
+            return None
+        }
+
+        let mut length_field = None::<String>;
+        if switch.cases.iter().all(|case| {
+            let fields = case.fields.borrow();
+            if fields.len() == 1 {
+                match fields.get(0) {
+                    Some(defs::FieldDef::List(list)) => match &list.length_expr {
+                        Some(Expression::FieldRef(field)) => match &length_field {
+                            None => {
+                                length_field = Some(field.field_name.clone());
+                                true
+                            },
+                            Some(fieldref) =>
+                                &field.field_name == fieldref,
+                        },
+                        _ => false,
+                    },
+                    _ => false,
+                }
+            } else {
+                false
+            }
+        }) {
+            length_field
+        } else {
+            None
+        }
+    }
 }
 
 impl fmt::Display for OutputSwitch<'_> {
@@ -1874,6 +1907,20 @@ impl fmt::Display for OutputSwitch<'_> {
             },
         }
 
+        let is_list = OutputSwitch::is_list(self.def).is_some();
+        if is_list {
+            writeln!(f, "impl {} {{", name)?;
+            writeln!(f, "\tpub fn len(&self) -> usize {{")?;
+            writeln!(f, "\t\tmatch self {{")?;
+            for case in &self.def.cases {
+                let case_name = Self::case_name(case);
+                writeln!(f, "\t\t\tSelf::{}(case) => case.len(),", ident::to_rust_type_name(case_name))?;
+            }
+            writeln!(f, "\t\t}}")?;
+            writeln!(f, "\t}}")?;
+            writeln!(f, "}}")?;
+        }
+
         for case in &self.def.cases {
             let case_name = Self::case_name(case);
             let case_type = format!("{}{}", name, ident::to_rust_type_name(case_name));
@@ -1891,6 +1938,16 @@ impl fmt::Display for OutputSwitch<'_> {
                 header: None,
             };
             writeln!(f, "{}", output)?;
+
+            if is_list {
+                let field = fields.first().unwrap();
+                let field = field.name().unwrap();
+                writeln!(f, "impl {} {{", case_type)?;
+                writeln!(f, "\tpub fn len(&self) -> usize {{")?;
+                writeln!(f, "\t\tself.{}.len()", field)?;
+                writeln!(f, "\t}}")?;
+                writeln!(f, "}}")?;
+            }
         }
 
         Ok(())
@@ -2184,6 +2241,8 @@ impl<'a> ExprContext<'a> {
     }
 
     pub fn format(&self, name: &str, kind: defs::FieldRefKind, is_field_ref: bool) -> String {
+        let mut name = name.splitn(2, '.');
+        let (name, postfix) = (name.next().unwrap(), name.next().unwrap_or(""));
         let prefix = match kind {
             defs::FieldRefKind::LocalField if self.is_decoder => "",
             defs::FieldRefKind::LocalField | defs::FieldRefKind::ExtParam if self.is_local => "self.",
@@ -2191,7 +2250,7 @@ impl<'a> ExprContext<'a> {
             defs::FieldRefKind::ExtParam => "param_",
             defs::FieldRefKind::SumOfRef => "_element.",
         };
-        match self.fields.iter().find(|&f| f.name() == Some(name)) {
+        let out = match self.fields.iter().find(|&f| f.name() == Some(name)) {
             Some(&field) => match field {
                 FieldDef::VirtualLen(def) =>
                     format!("{}{}.len()", prefix, ident::to_rust_variable_name(&def.list_name)),
@@ -2222,12 +2281,12 @@ impl<'a> ExprContext<'a> {
                 },
                 /*FieldDef::Normal(def) if is_field_ref && !matches!(def.type_.value_set, FieldValueSet::None) =>
                     format!("{}{}.bits()", prefix, ident::to_rust_variable_name(&def.name)),*/
-                FieldDef::List(list) if is_field_ref => // XXX: special case refer to list length by list name
+                /*FieldDef::List(list) if is_field_ref => // XXX: special case refer to list length by list name
                     format!("{}{}.len()", prefix, ident::to_rust_variable_name(&list.name)),
                 FieldDef::FdList(list) if is_field_ref => // XXX: special case refer to list length by list name
                     format!("{}{}.len()", prefix, ident::to_rust_variable_name(&list.name)),
                 FieldDef::Switch(switch) if is_field_ref => // XXX: special case refer to list length by list name
-                    format!("{}{}.variant()", prefix, ident::to_rust_variable_name(&switch.name)),
+                    format!("{}{}.variant()", prefix, ident::to_rust_variable_name(&switch.name)),*/
                 _ => {
                     let name = if name.is_empty() {
                         "0".into()
@@ -2249,6 +2308,11 @@ impl<'a> ExprContext<'a> {
                 }
                 format!("{}{}", prefix, ident::to_rust_variable_name(name))
             },
+        };
+        if postfix.is_empty() {
+            out
+        } else {
+            format!("{}.{}", out, postfix)
         }
     }
 }
@@ -2385,7 +2449,7 @@ impl OutputDeduction<'_> {
         match self.ded {
             DeducibleField::LengthOf(list_name, op) => {
                 let list_ref = Expression::FieldRef(defs::FieldRefExpr {
-                    field_name: list_name.clone(),
+                    field_name: format!("{}.len()", list_name),
                     resolved: Default::default(),
                 });
                 match op {
@@ -2419,7 +2483,7 @@ impl OutputDeduction<'_> {
             },
             DeducibleField::CaseSwitchExpr(switch_name, op) | DeducibleField::BitCaseSwitchExpr(switch_name, op) => {
                 let switch_ref = Expression::FieldRef(defs::FieldRefExpr {
-                    field_name: switch_name.clone(),
+                    field_name: format!("{}.variant()", switch_name),
                     resolved: Default::default(),
                 });
                 match op {

@@ -110,6 +110,9 @@ pub fn gather_deducible_fields(fields: &[&xcbdefs::FieldDef]) -> HashMap<String,
                 if switch_field.cases.iter().any(|case| case.exprs.len() != 1) {
                     None
                 } else if switch_field.kind == xcbdefs::SwitchKind::Case {
+                    if let Some(fieldref) = super::OutputSwitch::is_list(switch_field) {
+                        deducible_fields.insert(fieldref.into(), DeducibleField::LengthOf(switch_field.name.clone(), DeducibleLengthFieldOp::None));
+                    }
                     if let xcbdefs::Expression::FieldRef(ref field_ref_expr) = switch_field.expr {
                         Some((
                             field_ref_expr.field_name.clone(),
