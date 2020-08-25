@@ -1,5 +1,4 @@
 use std::sync::{Mutex as StdMutex, RwLock};
-use std::convert::TryInto;
 use std::collections::BTreeMap;
 use std::task::{Poll, Context};
 use std::sync::Arc;
@@ -7,12 +6,12 @@ use std::pin::Pin;
 use std::{error, io};
 use tokio_util::codec::{FramedRead, FramedWrite};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncReadExt};
-use bytes::{BytesMut, Buf};
-use futures::{Future, Stream, SinkExt};
+use bytes::BytesMut;
+use futures::{Future, Stream, SinkExt, FutureExt};
 use futures::channel::oneshot;
-use xproto::{Message, FromMessage, Request};
-use xproto::protocol::xcore::{SetupRequest, Setup, QueryExtensionRequest, QueryExtensionReply};
-use xproto::protocol::{CoreRequest, ExtensionRequest, ExtensionKind, ExtensionEventCode};
+use xproto::{Message, FromMessage, Request, XString};
+use xproto::protocol::xcore::{self, SetupRequest, Setup, QueryExtensionRequest, QueryExtensionReply};
+use xproto::protocol::{ExtensionRequest, ExtensionKind, ExtensionEventCode};
 use crate::codec::{XEncoder, XDecoder, XReply};
 use crate::xauth::Family;
 
@@ -177,6 +176,13 @@ impl<W: AsyncWrite + Unpin> XSink<W> {
             None =>
                 Err(io::Error::new(io::ErrorKind::BrokenPipe, "server is out of XIDs")),
         }
+    }
+
+    pub async fn intern_atom<I: Into<XString>>(&mut self, atom: I) -> impl Future<Output=io::Result<xcore::Atom>> {
+        self.execute(xcore::InternAtomRequest {
+            only_if_exists: false,
+            name: atom.into(),
+        }).await.map(|res| res.map(|res| res.atom.value()))
     }
 
     pub async fn extension(&mut self, kind: ExtensionKind) -> impl Future<Output=Result<Option<QueryExtensionReply>, io::Error>> {
