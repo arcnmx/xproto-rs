@@ -9,7 +9,7 @@ pub const BYTE_ORDER: u8 = 0x42;
 macro_rules! try_decode {
     ($expr:expr) => {
         match $expr {
-            Err(e) => return Err(From::from(e)),
+            Err(e) => return Err(Into::into(e)),
             Ok(None) => return Ok(None),
             Ok(Some(res)) => res,
         }

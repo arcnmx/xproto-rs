@@ -428,7 +428,9 @@ impl<E: Copy, T: Copy + Default> Default for ResizeMask<E, T> {
     }
 }
 
-impl<I: Into<BitFlags<E>>, E: Copy + RawBitFlags, T: Copy + ops::BitOrAssign<T> + From<E::Type>> ops::BitOrAssign<I> for ResizeMask<E, T> {
+impl<I: Into<BitFlags<E>>, E: Copy + RawBitFlags, T: Copy + ops::BitOrAssign<T>> ops::BitOrAssign<I> for ResizeMask<E, T> where
+    E::Type: Into<T>,
+{
     fn bitor_assign(&mut self, rhs: I) {
         self.bits |= rhs.into().bits().into();
     }
@@ -499,7 +501,9 @@ impl<E: Copy + RawBitFlags, T: Copy + AsPrimitive<E::Type>> From<ResizeMask<E, T
     }
 }
 
-impl<E: Copy + RawBitFlags, T: Copy + From<E::Type>> From<BitFlags<E>> for ResizeMask<E, T> {
+impl<E: Copy + RawBitFlags, T: Copy> From<BitFlags<E>> for ResizeMask<E, T> where
+    E::Type: Into<T>,
+{
     fn from(flags: BitFlags<E>) -> Self {
         unsafe {
             Self::with_bits_unchecked(flags.bits().into())
@@ -517,7 +521,9 @@ impl<E: Copy + RawBitFlags, T: Copy> AsPrimitive<ResizeMask<E, T>> for BitFlags<
     }
 }
 
-impl<E: Copy + RawBitFlags, T: Copy + From<E::Type>> From<E> for ResizeMask<E, T> {
+impl<E: Copy + RawBitFlags, T: Copy> From<E> for ResizeMask<E, T> where
+    E::Type: Into<T>,
+{
     fn from(flag: E) -> Self {
         let flags = BitFlags::from(flag);
         unsafe {
@@ -527,8 +533,8 @@ impl<E: Copy + RawBitFlags, T: Copy + From<E::Type>> From<E> for ResizeMask<E, T
 }
 
 impl<E: Copy + RawBitFlags, T: Copy> ResizeMask<E, T> {
-    pub fn with_bits(bits: T) -> Option<Self> where E::Type: TryFrom<T> {
-        let ebits = TryFrom::try_from(bits).ok()?;
+    pub fn with_bits(bits: T) -> Option<Self> where T: TryInto<E::Type> {
+        let ebits = bits.try_into().ok()?;
         BitFlags::<E>::from_bits(ebits)
             .ok()?;
         Some(unsafe { Self::with_bits_unchecked(bits) })
@@ -550,19 +556,19 @@ impl<E: RawBitFlags, T: Copy + enumflags2::_internal::BitFlagNum> ResizeMask<E, 
 
 impl<E: Copy + RawBitFlags, T: Copy + AsBytes + FromMessage> FromMessage for ResizeMask<E, T>
 where
-    DecodeError: From<T::Error>,
-    DecodeError: From<<E::Type as TryFrom<T>>::Error>,
-    DecodeError: From<enumflags2::FromBitsError<E>>,
-    E::Type: TryFrom<T>,
+    <T as FromMessage>::Error: Into<DecodeError>,
+    <T as TryInto<E::Type>>::Error: Into<DecodeError>,
+    enumflags2::FromBitsError<E>: Into<DecodeError>,
+    T: TryInto<E::Type>,
 {
     type Error = DecodeError;
     type Context = T::Context;
 
     fn decode<B: bytes::Buf>(context: Self::Context, b: &mut B) -> Result<Option<Self>, Self::Error> {
-        Ok(match T::decode(context, b)? {
+        Ok(match T::decode(context, b).map_err(Into::into)? {
             Some(repr) => Some({
-                let bits: E::Type = TryFrom::try_from(repr)?;
-                BitFlags::<E>::from_bits(bits)?;
+                let bits: E::Type = repr.try_into().map_err(Into::into)?;
+                BitFlags::<E>::from_bits(bits).map_err(Into::into)?;
                 unsafe {
                     Self::with_bits_unchecked(repr)
                 }
@@ -589,7 +595,7 @@ unsafe impl<E: Copy, T: Copy + FromBytes> FromBytes for AltEnum<E, T> {
     fn only_derive_is_allowed_to_implement_this_trait() where Self: Sized { }
 }
 
-impl<E: Copy + TryFrom<T> + fmt::Debug, T: Copy + fmt::Debug> fmt::Debug for AltEnum<E, T> {
+impl<E: Copy + fmt::Debug, T: Copy + fmt::Debug + TryInto<E>> fmt::Debug for AltEnum<E, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&self.get(), f)
     }
@@ -626,8 +632,8 @@ impl<E: Copy, T: Copy> AltEnum<E, T> {
         self.value
     }
 
-    pub fn get(&self) -> Result<E, T> where E: TryFrom<T> {
-        E::try_from(self.value).map_err(|_| self.value)
+    pub fn get(&self) -> Result<E, T> where T: TryInto<E> {
+        self.value.try_into().map_err(|_| self.value)
     }
 }
 
@@ -664,17 +670,17 @@ impl<E: Copy, T: Copy> ResizeEnum<E, T> {
 
 impl<E: Copy + CEnum, T: Copy + AsBytes + FromMessage> FromMessage for ResizeEnum<E, T>
 where
-    DecodeError: From<T::Error>,
-    DecodeError: From<<E as TryFrom<T>>::Error>,
-    E: TryFrom<T>,
+    T: TryInto<E>,
+    <T as FromMessage>::Error: Into<DecodeError>,
+    <T as TryInto<E>>::Error: Into<DecodeError>,
 {
     type Error = DecodeError;
     type Context = T::Context;
 
     fn decode<B: bytes::Buf>(context: Self::Context, b: &mut B) -> Result<Option<Self>, Self::Error> {
-        Ok(match T::decode(context, b)? {
+        Ok(match T::decode(context, b).map_err(Into::into)? {
             Some(value) => Some({
-                E::try_from(value)?;
+                TryInto::<E>::try_into(value).map_err(Into::into)?;
                 unsafe {
                     Self::with_value_unchecked(value)
                 }
@@ -702,8 +708,8 @@ impl<E: Copy, T: Copy> From<E> for ResizeEnum<E, T> where E: Into<T> {
 }
 
 impl<E: Copy + CEnum, T: Copy> ResizeEnum<E, T> {
-    pub fn with_value(value: T) -> Option<Self> where E::Repr: TryFrom<T> {
-        let repr = TryFrom::try_from(value).ok()?;
+    pub fn with_value(value: T) -> Option<Self> where T: TryInto<E::Repr> {
+        let repr = value.try_into().ok()?;
         match E::try_from(repr) {
             Ok(_) => Some(unsafe { Self::with_value_unchecked(value) }),
             _ => None,

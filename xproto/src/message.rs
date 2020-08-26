@@ -216,7 +216,7 @@ impl<T: Message> Message for Vec<T> {
 
 impl<T: FromMessage> FromMessage for Vec<T>
 where
-        DecodeError: From<T::Error>,
+        T::Error: Into<DecodeError>,
         T::Context: Clone,
 {
     type Error = DecodeError;
@@ -225,11 +225,11 @@ where
     fn decode<B: bytes::Buf>(context: Self::Context, b: &mut B) -> Result<Option<Self>, Self::Error> {
         if let Some(len) = context.0 {
             (0..len).map(|_| T::decode(context.1.clone(), b)).collect::<Result<Option<_>, _>>()
-                .map_err(From::from)
+                .map_err(Into::into)
         } else {
             let mut res = Vec::new();
             while b.remaining() > 0 {
-                match T::decode(context.1.clone(), b)? {
+                match T::decode(context.1.clone(), b).map_err(Into::into)? {
                     None => return Err(DecodeError::UnexpectedEof),
                     Some(t) => res.push(t),
                 }
@@ -268,7 +268,7 @@ impl<E: RawBitFlags> Message for BitFlags<E> where E::Type: Message {
 impl<E: RawBitFlags> FromMessage for BitFlags<E>
 where
     E::Type: FromMessage + Into<u32>,
-    DecodeError: From<<E::Type as FromMessage>::Error>,
+    <E::Type as FromMessage>::Error: Into<DecodeError>,
 {
     type Error = DecodeError;
     type Context = <E::Type as FromMessage>::Context;
@@ -276,6 +276,6 @@ where
     fn decode<B: Buf>(context: Self::Context, b: &mut B) -> Result<Option<Self>, Self::Error> {
         let bits = try_decode!(<E::Type>::decode(context, b));
         BitFlags::from_bits(bits)
-            .map_err(From::from).map(Some)
+            .map_err(Into::into).map(Some)
     }
 }
