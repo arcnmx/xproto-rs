@@ -261,11 +261,11 @@ fn local_peer_addr() -> (Family, Vec<u8>) {
     (Family::Local, hostname)
 }
 
-pub type IoRead<'a> = Pin<Box<dyn AsyncRead + Send + 'a>>;
-pub type IoWrite<'a> = Pin<Box<dyn AsyncWrite + Send + 'a>>;
+pub type IoRead<'a> = Pin<Box<dyn AsyncRead + Sync + Send + 'a>>;
+pub type IoWrite<'a> = Pin<Box<dyn AsyncWrite + Sync + Send + 'a>>;
 pub type IoStream<'a> = (IoRead<'a>, IoWrite<'a>);
 
-fn splitstream<'a, RW: AsyncRead + AsyncWrite + Send + 'a>(rw: RW) -> IoStream<'a> {
+fn splitstream<'a, RW: AsyncRead + AsyncWrite + Sync + Send + 'a>(rw: RW) -> IoStream<'a> {
     let (r, w) = tokio::io::split(rw);
     (Box::pin(r), Box::pin(w))
 }
