@@ -544,3 +544,102 @@ impl FromMessage for XString {
             .map(|data| data.map(Self::new))
     }
 }
+
+#[cfg(feature = "xinput")]
+mod xinput_impl {
+    use crate::conversion::AsPrimitive;
+    use super::xinput::{Fp3232, Fp1616};
+
+    impl Fp3232 {
+        pub fn fixed_point(self) -> i64 {
+            let int = i64::from(self.integral) << 32;
+            int | self.frac as i64 // is the fractional part correct here for negative numbers?
+        }
+
+        pub fn to_f64(self) -> f64 {
+            let int = self.integral as f64;
+            int + self.frac as f64 / (1u64 << 32) as f64
+        }
+
+        pub fn to_f32(self) -> f32 {
+            let int = self.integral as f32;
+            int + self.frac as f32 / (1u64 << 32) as f32
+        }
+    }
+
+    impl AsPrimitive<i32> for Fp3232 {
+        fn as_(self) -> i32 {
+            self.integral
+        }
+    }
+
+    impl AsPrimitive<i16> for Fp3232 {
+        fn as_(self) -> i16 {
+            self.integral.as_()
+        }
+    }
+
+    impl AsPrimitive<i8> for Fp3232 {
+        fn as_(self) -> i8 {
+            self.integral.as_()
+        }
+    }
+
+    impl AsPrimitive<f32> for Fp3232 {
+        fn as_(self) -> f32 {
+            self.to_f32()
+        }
+    }
+
+    impl AsPrimitive<f64> for Fp3232 {
+        fn as_(self) -> f64 {
+            self.to_f64()
+        }
+    }
+
+    impl Fp1616 {
+        pub fn integral(self) -> i16 {
+            (self.fixed_point() >> 16) as i16
+        }
+
+        pub fn frac(self) -> u16 {
+            self.fixed_point() as u16
+        }
+
+        pub fn fixed_point(self) -> i32 {
+            self.fp1616
+        }
+
+        pub fn to_f64(self) -> f64 {
+            self.fixed_point() as f64 / (1u64 << 16) as f64
+        }
+
+        pub fn to_f32(self) -> f32 {
+            self.fixed_point() as f32 / (1u32 << 16) as f32
+        }
+    }
+
+    impl AsPrimitive<i16> for Fp1616 {
+        fn as_(self) -> i16 {
+            self.integral()
+        }
+    }
+
+    impl AsPrimitive<i8> for Fp1616 {
+        fn as_(self) -> i8 {
+            self.integral().as_()
+        }
+    }
+
+    impl AsPrimitive<f32> for Fp1616 {
+        fn as_(self) -> f32 {
+            self.to_f32()
+        }
+    }
+
+    impl AsPrimitive<f64> for Fp1616 {
+        fn as_(self) -> f64 {
+            self.to_f64()
+        }
+    }
+}
