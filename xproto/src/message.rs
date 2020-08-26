@@ -3,7 +3,6 @@ use core::convert::Infallible;
 use bytes::{Buf, BufMut};
 use zerocopy::{AsBytes, FromBytes};
 use enumflags2::{BitFlags, RawBitFlags};
-use crate::conversion::AsPrimitive;
 use crate::DecodeError;
 
 // TODO: typenum
@@ -119,9 +118,6 @@ macro_rules! impl_message_for {
         $(
             impl MessageAsBytes for $ty { }
             impl MessageFromBytes for $ty { }
-            impl AsPrimitive<$ty> for $ty {
-                fn as_(self) -> $ty { self as $ty }
-            }
         )+
     }
 }

@@ -25,52 +25,34 @@ pub trait AsPrimitive<T> {
     fn as_(self) -> T;
 }
 
-impl AsPrimitive<bool> for u8 {
-    fn as_(self) -> bool { self != 0 }
+macro_rules! impl_as {
+    (@impl bool : $tys:ty) => {
+        impl AsPrimitive<$tys> for bool {
+            fn as_(self) -> $tys { self as $tys }
+        }
+    };
+    (@impl $ty:ty : bool) => {
+        impl AsPrimitive<bool> for $ty {
+            fn as_(self) -> bool { self != 0 }
+        }
+    };
+    (@impl $ty:ty : $tys:ty) => {
+        impl AsPrimitive<$tys> for $ty {
+            fn as_(self) -> $tys { self as $tys }
+        }
+    };
+    ({} : $($tys:tt,)+) => { };
+    ({ $ty0:tt $(, $tys0:tt)* }: $($tys:tt,)+ ) => {
+        $(
+            impl_as! { @impl $ty0 : $tys }
+        )+
+        impl_as! { { $($tys0),* } : $($tys,)+ }
+    };
 }
 
-impl AsPrimitive<bool> for u16 {
-    fn as_(self) -> bool { self != 0 }
-}
-
-impl AsPrimitive<bool> for u32 {
-    fn as_(self) -> bool { self != 0 }
-}
-
-impl AsPrimitive<u8> for bool {
-    fn as_(self) -> u8 { self as _ }
-}
-
-impl AsPrimitive<u8> for u16 {
-    fn as_(self) -> u8 { self as _ }
-}
-
-impl AsPrimitive<u8> for u32 {
-    fn as_(self) -> u8 { self as _ }
-}
-
-impl AsPrimitive<u16> for bool {
-    fn as_(self) -> u16 { self as _ }
-}
-
-impl AsPrimitive<u16> for u8 {
-    fn as_(self) -> u16 { self as _ }
-}
-
-impl AsPrimitive<u16> for u32 {
-    fn as_(self) -> u16 { self as _ }
-}
-
-impl AsPrimitive<u32> for bool {
-    fn as_(self) -> u32 { self as _ }
-}
-
-impl AsPrimitive<u32> for u8 {
-    fn as_(self) -> u32 { self as _ }
-}
-
-impl AsPrimitive<u32> for u16 {
-    fn as_(self) -> u32 { self as _ }
+impl_as! {
+    { bool, u8, u16, u32, u64, u128, i8, i16, i32, i64, i128 }
+    : bool, u8, u16, u32, u64, u128, i8, i16, i32, i64, i128,
 }
 
 pub(crate) trait Promote<RHS> {
