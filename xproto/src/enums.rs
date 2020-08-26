@@ -362,7 +362,7 @@ impl<RHS: Copy, E: Copy, T: Copy + PartialOrd<RHS>> PartialOrd<ResizeMask<E, RHS
     }
 }
 
-impl<T: Copy, E: Copy> Promote<T> for ResizeMask<E, T> {
+impl<E: Copy, T: Copy> Promote<T> for ResizeMask<E, T> {
     type Output = T;
 
     fn promote(self) -> Self::Output {
@@ -370,7 +370,7 @@ impl<T: Copy, E: Copy> Promote<T> for ResizeMask<E, T> {
     }
 }
 
-impl<T: Copy, E: Copy> Promote<ResizeMask<E, T>> for T {
+impl<E: Copy, T: Copy> Promote<ResizeMask<E, T>> for T {
     type Output = T;
 
     fn promote(self) -> Self::Output {
@@ -606,7 +606,6 @@ impl<E: Copy, T: Copy> From<E> for AltEnum<E, T> where E: Into<T> {
         Self::new(value)
     }
 }
-
 
 impl<E: Copy, T: Copy> AltEnum<E, T> {
     pub fn new(value: E) -> Self where E: Into<T> {
