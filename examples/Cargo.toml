@@ -5,8 +5,8 @@ authors = []
 edition = "2018"
 
 [dependencies]
-xproto = { version = "^0.1.0", features = ["present"], path = "../xproto" }
+xproto = { version = "^0.1.0", features = ["present", "xkb", "xinput"], path = "../xproto" }
 xserver = { version = "^0.1.0", path = "../xserver" }
 futures = { version = "^0.3.4" }
-tokio = { version = "*", features = ["macros"] }
-bytes = "^0.5.6"
+tokio = { version = "0.3", features = ["macros", "rt-multi-thread"] }
+bytes = "^0.6.0"
