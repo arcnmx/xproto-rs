@@ -597,7 +597,10 @@ unsafe impl<E: Copy, T: Copy + FromBytes> FromBytes for AltEnum<E, T> {
 
 impl<E: Copy + fmt::Debug, T: Copy + fmt::Debug + TryInto<E>> fmt::Debug for AltEnum<E, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&self.get(), f)
+        match &self.get() {
+            Ok(e) => f.debug_tuple("AltEnum").field(e).finish(),
+            Err(v) => f.debug_tuple("AltEnum::Value").field(v).finish(),
+        }
     }
 }
 
