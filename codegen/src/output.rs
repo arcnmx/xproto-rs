@@ -649,7 +649,7 @@ impl fmt::Display for OutputFieldName<'_> {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ImplKind {
     Struct,
     TupleStruct,
@@ -1187,6 +1187,26 @@ impl fmt::Display for OutputStruct<'_> {
                 }
             }
             impl_.impl_end(&mut *f)?;
+        }
+
+        match &self.fields[..] {
+            [field] if self.kind == ImplKind::TupleStruct => {
+                let type_ = OutputFieldType {
+                    namespace: self.namespace.clone(),
+                    parent: &parent,
+                    def: field,
+                };
+
+                impl_.impl_trait_begin(&mut *f, "core::ops::Deref", &[])?;
+                writeln!(f, "\ttype Target = {};", type_)?;
+                writeln!(f, "\tfn deref(&self) -> &Self::Target {{ &self.0 }}")?;
+                impl_.impl_end(&mut *f)?;
+
+                impl_.impl_trait_begin(&mut *f, "core::ops::DerefMut", &[])?;
+                writeln!(f, "\tfn deref_mut(&mut self) -> &mut Self::Target {{ &mut self.0 }}")?;
+                impl_.impl_end(&mut *f)?;
+            },
+            _ => (),
         }
 
         writeln!(f, "{}", OutputMessage {
