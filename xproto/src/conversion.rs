@@ -151,3 +151,19 @@ pub trait CEnum: Copy + TryFrom<<Self as CEnum>::Repr> + Into<<Self as CEnum>::R
         self.into()
     }
 }
+
+#[cfg(feature = "xinput")]
+pub(crate) fn iter_bits(mut index: usize, mut v: u32) -> impl Iterator<Item=usize> {
+    std::iter::from_fn(move || {
+        if v == 0 {
+            None
+        } else {
+            let shift = v.trailing_zeros();
+            v >>= shift + 1;
+            let shift = shift as usize;
+            let res = index + shift;
+            index += shift + 1;
+            Some(res as usize)
+        }
+    })
+}

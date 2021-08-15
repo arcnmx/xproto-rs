@@ -547,13 +547,36 @@ impl FromMessage for XString {
 
 #[cfg(feature = "xinput")]
 mod xinput_impl {
-    use crate::conversion::AsPrimitive;
-    use super::xinput::{Fp3232, Fp1616};
+    use crate::conversion::{AsPrimitive, iter_bits};
+    use super::xinput::{Fp3232, Fp1616, ButtonPressEvent, RawButtonPressEvent};
 
     impl Fp3232 {
+        pub fn new(fp3232: i64) -> Self {
+            Self {
+                integral: (fp3232 >> 32) as i32,
+                frac: fp3232 as u32,
+            }
+        }
+
+        pub fn with_integral(integral: i32) -> Self {
+            Self {
+                integral,
+                frac: 0,
+            }
+        }
+
+        pub fn with_parts(integral: i32, frac: u32) -> Self {
+            Self {
+                integral,
+                frac,
+            }
+        }
+
+        // 1.25 is encoded as (1, 0x40000000)
+        // -1.25 is encoded as (-2, 0xc0000000)
         pub fn fixed_point(self) -> i64 {
             let int = i64::from(self.integral) << 32;
-            int | self.frac as i64 // is the fractional part correct here for negative numbers?
+            int | self.frac as i64
         }
 
         pub fn to_f64(self) -> f64 {
@@ -597,7 +620,27 @@ mod xinput_impl {
         }
     }
 
+    impl From<i32> for Fp3232 {
+        fn from(v: i32) -> Self {
+            Self::with_integral(v)
+        }
+    }
+
     impl Fp1616 {
+        pub fn new(fp1616: i32) -> Self {
+            Self {
+                fp1616,
+            }
+        }
+
+        pub fn with_integral(integral: i16) -> Self {
+            Self::new((integral as i32) << 16)
+        }
+
+        pub fn with_parts(integral: i16, frac: u16) -> Self {
+            Self::new(i32::from(integral) << 16 | i32::from(frac))
+        }
+
         pub fn integral(self) -> i16 {
             (self.fixed_point() >> 16) as i16
         }
@@ -640,6 +683,64 @@ mod xinput_impl {
     impl AsPrimitive<f64> for Fp1616 {
         fn as_(self) -> f64 {
             self.to_f64()
+        }
+    }
+
+    impl From<i16> for Fp1616 {
+        fn from(v: i16) -> Self {
+            Self::with_integral(v)
+        }
+    }
+
+    impl ButtonPressEvent {
+        pub fn root_x(&self) -> i16 {
+            self.root_x.integral()
+        }
+
+        pub fn root_y(&self) -> i16 {
+            self.root_y.integral()
+        }
+
+        pub fn event_x(&self) -> i16 {
+            self.event_x.integral()
+        }
+
+        pub fn event_y(&self) -> i16 {
+            self.event_y.integral()
+        }
+
+        pub fn valuator_mask<'a>(&'a self) -> impl Iterator<Item=u16> + 'a {
+            self.valuator_mask.iter().enumerate()
+                .flat_map(|(i, &mask)| iter_bits(i * 32, mask))
+                .map(|i| i as u16)
+        }
+
+        pub fn button_mask<'a>(&'a self) -> impl Iterator<Item=usize> + 'a {
+            self.button_mask.iter().enumerate()
+                .flat_map(|(i, &mask)| iter_bits(i * 32, mask))
+        }
+
+        pub fn axisvalues<'a>(&'a self) -> impl Iterator<Item=(u16, Fp3232)> + 'a {
+            self.valuator_mask()
+                .zip(self.axisvalues.iter().copied())
+        }
+    }
+
+    impl RawButtonPressEvent {
+        pub fn valuator_mask<'a>(&'a self) -> impl Iterator<Item=u16> + 'a {
+            self.valuator_mask.iter().enumerate()
+                .flat_map(|(i, &mask)| iter_bits(i * 32, mask))
+                .map(|i| i as u16)
+        }
+
+        pub fn axisvalues<'a>(&'a self) -> impl Iterator<Item=(u16, Fp3232)> + 'a {
+            self.valuator_mask()
+                .zip(self.axisvalues.iter().copied())
+        }
+
+        pub fn axisvalues_raw<'a>(&'a self) -> impl Iterator<Item=(u16, Fp3232)> + 'a {
+            self.valuator_mask()
+                .zip(self.axisvalues_raw.iter().copied())
         }
     }
 }
