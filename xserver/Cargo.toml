@@ -20,7 +20,7 @@ bytes = "^1.0.0"
 xproto = { version = "^0.1.0", features = [], path = "../xproto" }
 futures = { version = "^0.3.4", features = ["bilock", "unstable"], optional = true }
 tokio = { version = "^1.0.0", default-features = false, features = ["net", "io-util"], optional = true }
-tokio-util = { version = "^0.6.0", default-features = false, features = ["codec"], optional = true }
+tokio-util = { version = "^0.7.0", default-features = false, features = ["codec"], optional = true }
 gethostname = "^0.2.1"
 
 [features]
